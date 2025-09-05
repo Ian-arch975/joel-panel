@@ -283,4 +283,25 @@
         </div>
       </div>
     </section>
+    <!-- Editor Panel -->
+    <section class="panel editors">
+      <div class="panel-header">
+        <h3>Editor</h3>
+        <div class="toolrow">
+          <div class="tabs">
+            <div class="tab active" data-tab="html">HTML</div>
+            <div class="tab" data-tab="css">CSS</div>
+            <div class="tab" data-tab="js">JS</div>
+          </div>
+          <button class="btn small" id="btnFormat">Format</button>
+          <button class="btn small" id="btnInsertBase">Insert Base Template</button>
+          <span class="ml-auto" style="color:var(--muted); font-size:12px">Edits update preview automatically</span>
+        </div>
+      </div>
+      <div class="editor">
+        <div id="htmlEditor" class="code"></div>
+        <div id="cssEditor" class="code hidden"></div>
+        <div id="jsEditor" class="code hidden"></div>
+      </div>
+    </section>
 

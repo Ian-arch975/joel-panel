@@ -304,4 +304,22 @@
         <div id="jsEditor" class="code hidden"></div>
       </div>
     </section>
+    <!-- Preview Panel -->
+    <section class="panel preview">
+      <div class="panel-header">
+        <h3>Live Preview</h3>
+        <div class="preview-controls">
+          <button class="device" data-w="375">Mobile</button>
+          <button class="device" data-w="768">Tablet</button>
+          <button class="device active" data-w="100%">Desktop</button>
+          <button class="btn small" id="btnReload">Reload</button>
+        </div>
+      </div>
+      <div class="iframe-wrap">
+        <div class="iframe-shell" id="iframeShell">
+          <iframe class="preview" id="preview"></iframe>
+        </div>
+      </div>
+    </section>
+  </main>
 

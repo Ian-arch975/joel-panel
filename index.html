@@ -322,4 +322,290 @@
       </div>
     </section>
   </main>
+    <script>
+    // -------------------------------
+    // BlueForge Visual AI Builder
+    // -------------------------------
+    // Architecture:
+    // - HTML/CSS/JS editors (Ace)
+    // - Live preview via iframe.srcdoc
+    // - Interaction area parses plain-English instructions into components
+    // - Components are inserted with identifiable markers for regeneration/editing
+    // - Export as ZIP
+    //
+    // Note: This is fully client-side; the "AI" here is a rule-based generator that
+    // covers common web components. You can wire it to any LLM via an API if desired.
+
+    // Project state
+    const Project = {
+      theme: {
+        accent: '#2563eb',
+        darkPreview: false,
+      },
+      // Managed components tracked here for editing/regeneration
+      components: [], // {id, type, options}
+      // Utility to generate unique ids
+      nextId: 1
+    };
+
+    // DOM refs
+    const $ = (sel, ctx=document) => ctx.querySelector(sel);
+    const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+    const input = $('#input');
+    const messages = $('#messages');
+    const compList = $('#compList');
+    const accentPicker = $('#accentColor');
+    const iframe = $('#preview');
+    const iframeShell = $('#iframeShell');
+
+    // Editors (Ace)
+    const htmlEditor = ace.edit('htmlEditor', { theme: 'ace/theme/tomorrow_night_eighties', mode: 'ace/mode/html', useWorker: false });
+    const cssEditor  = ace.edit('cssEditor',  { theme: 'ace/theme/tomorrow_night_eighties', mode: 'ace/mode/css', useWorker: false });
+    const jsEditor   = ace.edit('jsEditor',   { theme: 'ace/theme/tomorrow_night_eighties', mode: 'ace/mode/javascript', useWorker: false });
+
+    htmlEditor.setOptions({ fontSize: '13px', tabSize: 2, useSoftTabs: true, wrap: true });
+    cssEditor.setOptions({ fontSize: '13px', tabSize: 2, useSoftTabs: true, wrap: true });
+    jsEditor.setOptions({ fontSize: '13px', tabSize: 2, useSoftTabs: true, wrap: true });
+
+    // Base CSS — inserted in the preview to give clean defaults
+    const baseCSS = () => `
+      /* ---- Base Styles injected by BlueForge (safe to remove in your export) ---- */
+      :root {
+        --accent: ${Project.theme.accent};
+        --accent-700: ${shade(Project.theme.accent, -12)};
+        --bg: ${Project.theme.darkPreview ? '#0b1220' : '#ffffff'};
+        --text: ${Project.theme.darkPreview ? '#e5edff' : '#0f172a'};
+        --muted: ${Project.theme.darkPreview ? 'rgba(229,237,255,0.7)' : '#334155'};
+        --card: ${Project.theme.darkPreview ? '#0f172a' : '#f8fafc'};
+        --ring: ${Project.theme.darkPreview ? 'rgba(96,165,250,.35)' : 'rgba(59,130,246,.35)'};
+      }
+      * { box-sizing: border-box }
+      body {
+        margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, Arial;
+        background: var(--bg); color: var(--text); line-height: 1.6;
+      }
+      a { color: var(--accent); text-decoration: none }
+      img { max-width: 100%; display: block }
+      .container { width: min(1140px, 92%); margin: 0 auto }
+      .btn {
+        display: inline-flex; align-items: center; gap: .5rem; padding: .7rem 1rem; border-radius: 10px; font-weight: 600;
+        background: var(--accent); color: white; border: 1px solid rgba(0,0,0,.05); box-shadow: 0 6px 14px rgba(37,99,235,.25); cursor: pointer;
+      }
+      .btn.secondary {
+        background: transparent; color: var(--accent); border: 1px solid var(--accent);
+      }
+      .card {
+        background: var(--card); border: 1px solid rgba(0,0,0,.06); border-radius: 14px; padding: 1rem;
+        box-shadow: ${Project.theme.darkPreview ? '0 6px 18px rgba(0,0,0,.35)' : '0 6px 18px rgba(2,6,23,.05)'};
+      }
+      /* Simple reveal animation */
+      .reveal { opacity: 0; transform: translateY(10px); transition: .5s ease }
+      .reveal.revealed { opacity: 1; transform: none }
+    `;
+
+    // Default starter template in editors
+    const starterHTML = `
+<!-- App Shell (you can remove comments safely) -->
+<header class="site-header">
+  <div class="container">
+    <nav class="nav">
+      <a href="#" class="brand">BlueForge</a>
+      <button class="nav-toggle" aria-label="Toggle menu">☰</button>
+      <ul class="links">
+        <li><a href="#">Home</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+      </ul>
+      <a class="btn" href="#get-started">Get started</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container">
+      <h1>Build beautiful sites faster</h1>
+      <p class="sub">Design, edit, and preview in one place — powered by an AI assistant.</p>
+      <div class="cta">
+        <a class="btn" href="#get-started">Get started</a>
+        <a class="btn secondary" href="#learn-more">Learn more</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="features">
+    <div class="container">
+      <div class="grid">
+        <div class="card reveal"><h3>Clean code</h3><p>Accessible, semantic, and easy to edit.</p></div>
+        <div class="card reveal"><h3>Live preview</h3><p>Instant updates as you type.</p></div>
+        <div class="card reveal"><h3>Components</h3><p>Navbar, hero, pricing, forms, and more.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© <span id="year"></span> BlueForge. All rights reserved.</p>
+  </div>
+</footer>
+`.trim();
+
+    const starterCSS = `
+/* Site Header (responsive) */
+.site-header { position: sticky; top: 0; backdrop-filter: blur(8px); background: ${Project.theme.darkPreview ? 'rgba(15,23,42,.5)' : 'rgba(255,255,255,.8)'}; border-bottom: 1px solid rgba(0,0,0,.06); z-index: 40 }
+.nav { display: grid; grid-template-columns: auto 1fr auto auto; gap: 1rem; align-items: center; padding: .7rem 0 }
+.brand { font-weight: 800; color: var(--text); font-size: 1.1rem }
+.links { display: flex; gap: 1rem; list-style: none; padding: 0; margin: 0 }
+.links a { color: var(--text); opacity: .8 }
+.links a:hover { opacity: 1 }
+.nav-toggle { display: none; }
+
+@media (max-width: 800px) {
+  .nav { grid-template-columns: auto auto 1fr; grid-template-areas: "brand toggle cta" "links links links" }
+  .brand { grid-area: brand }
+  .nav-toggle { grid-area: toggle; display: inline-flex; border: 1px solid rgba(0,0,0,.1); background: transparent; padding: .4rem .6rem; border-radius: 8px; color: var(--text) }
+  .links { grid-area: links; display: none; flex-direction: column; gap: .6rem; margin: .6rem 0 }
+  .links.open { display: flex }
+}
+
+/* Hero */
+.hero { padding: clamp(2.4rem, 6vw, 4rem) 0 }
+.hero h1 { font-size: clamp(1.8rem, 4.6vw, 3rem); line-height: 1.1; margin: 0 0 .6rem }
+.hero .sub { color: var(--muted); max-width: 54ch }
+.cta { display: flex; gap: .8rem; margin-top: 1rem }
+
+/* Features grid */
+.features { padding: 2rem 0; }
+.features .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 1rem }
+
+/* Footer */
+.site-footer { padding: 2rem 0; border-top: 1px solid rgba(0,0,0,.06); color: var(--muted); font-size: .95rem; }
+
+/* Helpers */
+.section { padding: 2rem 0 }
+`.trim();
+
+    const starterJS = `
+// Small enhancements and utilities
+document.querySelector('#year')?.appendChild(document.createTextNode(String(new Date().getFullYear())));
+
+// Reveal on scroll
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('revealed'); });
+}, { threshold: 0.14 });
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+// Nav toggle (mobile)
+document.querySelector('.nav-toggle')?.addEventListener('click', () => {
+  document.querySelector('.links')?.classList.toggle('open');
+});
+`.trim();
+
+    // Init editors with starter content
+    htmlEditor.session.setValue(starterHTML);
+    cssEditor.session.setValue(starterCSS);
+    jsEditor.session.setValue(starterJS);
+
+    // Initial preview build
+    rebuildPreview();
+
+    // Handle tabs switching
+    $$('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        $$('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const name = tab.dataset.tab;
+        $('#htmlEditor').classList.toggle('hidden', name !== 'html');
+        $('#cssEditor').classList.toggle('hidden', name !== 'css');
+        $('#jsEditor').classList.toggle('hidden', name !== 'js');
+      });
+    });
+
+    // Live update preview (debounced)
+    let previewTimer;
+    [htmlEditor, cssEditor, jsEditor].forEach(ed => {
+      ed.session.on('change', () => {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(rebuildPreview, 300);
+      });
+    });
+
+    // Device toggles
+    $$('.device').forEach(btn => btn.addEventListener('click', () => {
+      $$('.device').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const w = btn.dataset.w;
+      iframeShell.style.width = typeof w === 'string' && w.endsWith('%') ? w : w + 'px';
+    }));
+
+    // Buttons
+    $('#btnBuild').addEventListener('click', rebuildPreview);
+    $('#btnReload').addEventListener('click', rebuildPreview);
+    $('#btnFormat').addEventListener('click', formatEditors);
+    $('#btnNew').addEventListener('click', newProject);
+    $('#btnInsertBase').addEventListener('click', insertBaseTemplate);
+    $('#btnDownload').addEventListener('click', exportZip);
+    $('#btnImport').addEventListener('click', importFiles);
+    $('#btnDark').addEventListener('click', () => {
+      Project.theme.darkPreview = !Project.theme.darkPreview;
+      info(`Preview theme set to ${Project.theme.darkPreview ? 'dark' : 'light'}.`);
+      rebuildPreview();
+    });
+    $('#btnHelp').addEventListener('click', () => {
+      info('Try: "Build a landing page with a navbar, hero, and pricing"; "Add a contact form"; "Change the primary color to #1e40af"; "Regenerate the hero with image on right".');
+    });
+
+    // Accent color change
+    accentPicker.addEventListener('input', (e) => {
+      Project.theme.accent = e.target.value;
+      info(`Accent color updated to ${Project.theme.accent}`);
+      rebuildPreview();
+    });
+
+    // Chat composer
+    $('#btnSend').addEventListener('click', onUserSubmit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onUserSubmit(); }
+    });
+
+    $$('.chip').forEach(chip => chip.addEventListener('click', () => {
+      input.value = chip.dataset.quick || '';
+      onUserSubmit();
+    }));
+
+    // -------------------------------
+    // Preview builder
+    // -------------------------------
+    function rebuildPreview() {
+      const head = `
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>${baseCSS()}\n${cssEditor.getValue()}</style>
+      `;
+      const body = `
+        ${htmlEditor.getValue()}
+        <script>${jsEditor.getValue()}<\/script>
+      `;
+      const doc = `<!doctype html><html><head>${head}</head><body>${body}</body></html>`;
+      iframe.srcdoc = doc;
+    }
+
+    // -------------------------------
+    // Interaction area utilities
+    // -------------------------------
+    function addMessage(role, text) {
+      const m = document.createElement('div');
+      m.className = `msg ${role}`;
+      m.innerHTML = `
+        <div class="avatar">${role === 'ai' ? 'A' : 'U'}</div>
+        <div class="bubble">${text}</div>
+      `;
+      messages.appendChild(m);
+      messages.scrollTop = messages.scrollHeight;
+    }
+    function ok(text)    { addMessage('ai', `<span class="green">✅</span> ${text}`); }
+    function warn(text)  { addMessage('ai', `<span class="yellow">⚠️</span> ${text}`); }
+    function info(text)  { addMessage('ai', text); }
+
 

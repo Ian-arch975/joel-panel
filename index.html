@@ -607,5 +607,503 @@ document.querySelector('.nav-toggle')?.addEventListener('click', () => {
     function ok(text)    { addMessage('ai', `<span class="green">✅</span> ${text}`); }
     function warn(text)  { addMessage('ai', `<span class="yellow">⚠️</span> ${text}`); }
     function info(text)  { addMessage('ai', text); }
+    // -------------------------------
+    // NL ➜ Code: lightweight rule-based generator
+    // -------------------------------
+    function onUserSubmit() {
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage('user', escapeHtml(text));
+      input.value = '';
+      handleInstruction(text);
+    }
+
+    function handleInstruction(text) {
+      const lower = text.toLowerCase();
+
+      // Global operations
+      if (/new project|reset/i.test(text)) { newProject(); ok('Started a fresh project.'); return; }
+      if (/export|download/i.test(text)) { exportZip(); ok('Downloaded your project as a ZIP.'); return; }
+      const colorHex = text.match(/#([0-9a-f]{3,8})\b/i);
+      const colorName = text.match(/\b(blue|indigo|violet|purple|emerald|teal|cyan|rose|amber)\b/i);
+      if (/color|accent|primary/i.test(text) && (colorHex || colorName)) {
+        const c = colorHex ? `#${colorHex[1]}` : namedToHex(colorName[1]);
+        Project.theme.accent = c;
+        ok(`Primary accent set to ${c}.`);
+        return rebuildPreview();
+      }
+
+      // Extract possible labels/text content
+      const logo = extractQuoted(text, /(logo|brand|title|site)\s*/i) || (text.match(/logo\s+([A-Za-z0-9\- ]{2,20})/i)?.[1]);
+      const linksList = parseCommaList(text, /(links?|menu|items)\s*(?:are|:)\s*/i);
+      const title  = extractQuoted(text, /title/i);
+      const subtitle = extractQuoted(text, /(subtitle|tagline|subheading)/i);
+      const cta = extractQuoted(text, /(cta|button|primary button)/i);
+      const cta2 = extractQuoted(text, /(secondary button|secondary cta)/i);
+
+      // Identify components to add
+      let didSomething = false;
+      if (/navbar|nav bar|navigation/i.test(text)) {
+        insertNavbar({ brand: logo || 'BlueForge', links: linksList.length ? linksList : ['Home','Features','Pricing','Contact'], sticky: /sticky/i.test(text) });
+        didSomething = true;
+      }
+      if (/hero|header section|banner/i.test(text)) {
+        insertHero({ title: title || 'Elevate your web dev', subtitle: subtitle || 'Build faster with an AI coding assistant.', primary: cta || 'Get started', secondary: cta2 || 'Learn more', variant: /image|split/i.test(text) ? 'split' : 'center' });
+        didSomething = true;
+      }
+      if (/pricing|plans?/i.test(text)) {
+        const plans = parseCommaList(text, /(plans?|pricing)\s*(?:are|:)\s*/i);
+        insertPricing({ plans: plans.length ? plans : ['Starter', 'Pro', 'Enterprise'] });
+        didSomething = true;
+      }
+      if (/contact form|contact/i.test(text) && !/contact\s*(links?)/i.test(text)) {
+        const fields = parseCommaList(text, /(fields?)\s*(?:are|:)\s*/i);
+        insertContactForm({ fields: fields.length ? fields : ['name','email','message'] });
+        didSomething = true;
+      }
+      if (/footer/i.test(text)) {
+        const links = parseCommaList(text, /(links?|items?)\s*(?:are|:)\s*/i);
+        insertFooter({ links: links.length ? links : ['About','Privacy','Terms'] });
+        didSomething = true;
+      }
+      if (/modal/i.test(text)) { insertModal({ title: title || 'Quick modal', body: subtitle || 'This is a simple modal dialog.' }); didSomething = true; }
+      if (/tabs?/i.test(text)) { insertTabs({ tabs: ['Overview','Details','FAQ'] }); didSomething = true; }
+      if (/accordion|faq/i.test(text)) { insertAccordion(); didSomething = true; }
+      if (/cards?|grid/i.test(text) && /features|team|gallery/i.test(text)) { insertCardGrid({ heading: 'Features', items: 3 }); didSomething = true; }
+
+      // Regeneration or edits
+      if (/regenerate|refresh/i.test(text) && /hero/i.test(text)) { regenerateComponent('hero', comp => { comp.options.variant = /image|split/i.test(text) ? 'split' : 'center'; }); didSomething = true; }
+      if (/edit|change|update/i.test(text) && /cta/i.test(text)) { regenerateComponent('hero', comp => { comp.options.primary = cta || comp.options.primary; comp.options.secondary = cta2 || comp.options.secondary; }); didSomething = true; }
+      if (/sticky/i.test(text) && /nav/i.test(text)) { regenerateComponent('navbar', comp => comp.options.sticky = true); didSomething = true; }
+
+      if (!didSomething) {
+        warn('I didn’t fully understand. Try specifying components: navbar, hero, pricing, contact form, footer, modal, tabs, accordion, cards.');
+      } else {
+        rebuildPreview();
+      }
+      renderComponentList();
+    }
+
+    // -------------------------------
+    // Component insertion helpers
+    // -------------------------------
+    function appendToHTML(markup) {
+      const current = htmlEditor.getValue();
+      htmlEditor.session.setValue(current + '\n\n' + markup);
+    }
+    function appendToCSS(css) {
+      if (!css) return;
+      const current = cssEditor.getValue();
+      if (!current.includes(css.trim())) {
+        cssEditor.session.setValue(current + '\n\n' + css);
+      }
+    }
+    function appendToJS(js) {
+      if (!js) return;
+      const current = jsEditor.getValue();
+      if (!current.includes(js.trim())) {
+        jsEditor.session.setValue(current + '\n\n' + js);
+      }
+    }
+
+    // Insert Navbar
+    function insertNavbar(opts = {}) {
+      const id = makeId('navbar');
+      const { brand='BlueForge', links=['Home','Features','Pricing','Contact'], sticky=false } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"navbar"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Responsive Navbar (generated) -->
+<header class="site-header${sticky ? ' is-sticky' : ''}">
+  <div class="container">
+    <nav class="nav">
+      <a href="#" class="brand">${escapeHtml(brand)}</a>
+      <button class="nav-toggle" aria-label="Toggle menu">☰</button>
+      <ul class="links">
+        ${links.map(l => `<li><a href="#">${escapeHtml(l)}</a></li>`).join('\n        ')}
+      </ul>
+      <a class="btn" href="#">Get started</a>
+    </nav>
+  </div>
+</header>
+${markerEnd}`.trim();
+
+      const css = `
+/* Navbar base (generated) */
+.site-header${sticky ? '.is-sticky' : ''} { ${sticky ? 'position: sticky; top:0; z-index: 50;' : ''} }
+.nav { display: grid; grid-template-columns: auto 1fr auto auto; gap: 1rem; align-items: center; padding: .7rem 0 }
+.brand { font-weight: 800; color: var(--text); font-size: 1.1rem }
+.links { display: flex; gap: 1rem; list-style: none; padding: 0; margin: 0 }
+.links a { color: var(--text); opacity: .8 }
+.links a:hover { opacity: 1 }
+.nav-toggle { display: none; }
+@media (max-width: 800px) {
+  .nav { grid-template-columns: auto auto 1fr; grid-template-areas: "brand toggle cta" "links links links" }
+  .brand { grid-area: brand }
+  .nav-toggle { grid-area: toggle; display: inline-flex; border: 1px solid rgba(0,0,0,.1); background: transparent; padding: .4rem .6rem; border-radius: 8px; color: var(--text) }
+  .links { grid-area: links; display: none; flex-direction: column; gap: .6rem; margin: .6rem 0 }
+  .links.open { display: flex }
+}
+`.trim();
+
+      const js = `
+// Navbar toggle (generated)
+document.querySelectorAll('.nav-toggle').forEach(btn=>{
+  btn.addEventListener('click',()=>btn.closest('.nav')?.querySelector('.links')?.classList.toggle('open'));
+});
+`.trim();
+
+      appendToHTML(html);
+      appendToCSS(css);
+      appendToJS(js);
+      Project.components.push({ id, type: 'navbar', options: { brand, links, sticky } });
+      ok('Navbar added.');
+    }
+
+    // Insert Hero
+    function insertHero(opts = {}) {
+      const id = makeId('hero');
+      const { title='Elevate your web dev', subtitle='Build faster with an AI assistant.', primary='Get started', secondary='Learn more', variant='center' } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"hero"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const heroCenter = `
+${markerStart}
+<!-- Hero (centered, generated) -->
+<section class="hero">
+  <div class="container">
+    <h1>${escapeHtml(title)}</h1>
+    <p class="sub">${escapeHtml(subtitle)}</p>
+    <div class="cta">
+      <a class="btn" href="#">${escapeHtml(primary)}</a>
+      <a class="btn secondary" href="#">${escapeHtml(secondary)}</a>
+    </div>
+  </div>
+</section>
+${markerEnd}`.trim();
+
+      const heroSplit = `
+${markerStart}
+<!-- Hero (split image-right, generated) -->
+<section class="hero split">
+  <div class="container">
+    <div class="col">
+      <h1>${escapeHtml(title)}</h1>
+      <p class="sub">${escapeHtml(subtitle)}</p>
+      <div class="cta">
+        <a class="btn" href="#">${escapeHtml(primary)}</a>
+        <a class="btn secondary" href="#">${escapeHtml(secondary)}</a>
+      </div>
+    </div>
+    <div class="col">
+      <div class="img card">
+        <!-- Replace with your image -->
+        <img alt="Preview" src="https://images.unsplash.com/photo-1526378722484-bd91ca387e72?q=80&w=1600&auto=format&fit=crop" />
+      </div>
+    </div>
+  </div>
+</section>
+${markerEnd}`.trim();
+
+      const css = `
+/* Hero (generated) */
+.hero { padding: clamp(2.4rem, 6vw, 4rem) 0 }
+.hero h1 { font-size: clamp(1.8rem, 4.6vw, 3rem); line-height: 1.1; margin: 0 0 .6rem }
+.hero .sub { color: var(--muted); max-width: 54ch }
+.hero .cta { display: flex; gap: .8rem; margin-top: 1rem }
+.hero.split .container { display: grid; grid-template-columns: 1.2fr 1fr; gap: 2rem; align-items: center }
+.hero .img { overflow: hidden }
+.hero .img img { width: 100%; height: auto; border-radius: 12px }
+@media (max-width: 900px) {
+  .hero.split .container { grid-template-columns: 1fr; }
+}
+`.trim();
+
+      appendToHTML(variant === 'split' ? heroSplit : heroCenter);
+      appendToCSS(css);
+      Project.components.push({ id, type: 'hero', options: { title, subtitle, primary, secondary, variant } });
+      ok(`Hero (${variant}) added.`);
+    }
+
+    // Insert Pricing
+    function insertPricing(opts = {}) {
+      const id = makeId('pricing');
+      const { plans = ['Starter','Pro','Enterprise'] } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"pricing"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Pricing (generated) -->
+<section id="pricing" class="section pricing">
+  <div class="container">
+    <h2 style="margin:0 0 .6rem">Pricing</h2>
+    <p class="sub" style="color:var(--muted); margin:0 0 1.2rem">Simple pricing for teams of every size.</p>
+    <div class="grid">
+      ${plans.map((p, i) => `
+      <div class="card">
+        <h3>${escapeHtml(p)}</h3>
+        <p style="color:var(--muted); margin:.2rem 0 1rem">Great for ${i===0?'starters':i===1?'growing teams':'larger orgs'}.</p>
+        <div style="font-weight:800; font-size:1.8rem; margin:.2rem 0 1rem">${i===0?'$9':i===1?'$29':'$79'}<span style="font-size:.9rem; opacity:.7">/mo</span></div>
+        <ul style="padding-left: 1.1rem; line-height:1.9; margin:0 0 1rem">
+          <li>Feature A</li><li>Feature B</li><li>Feature C</li>
+        </ul>
+        <a class="btn" href="#">Choose ${escapeHtml(p)}</a>
+      </div>`).join('')}
+    </div>
+  </div>
+</section>
+${markerEnd}`.trim();
+
+      const css = `
+/* Pricing (generated) */
+.pricing .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 1rem }
+.pricing .card { padding: 1.2rem }
+.pricing .card h3 { margin: 0 0 .2rem }
+`.trim();
+
+      appendToHTML(html);
+      appendToCSS(css);
+      Project.components.push({ id, type: 'pricing', options: { plans } });
+      ok('Pricing section added.');
+    }
+
+    // Contact Form
+    function insertContactForm(opts = {}) {
+      const id = makeId('contact');
+      const { fields = ['name','email','message'] } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"contact"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Contact Form (generated) -->
+<section id="contact" class="section">
+  <div class="container">
+    <h2>Contact us</h2>
+    <form class="card contact-form" onsubmit="return contactSubmit(event)">
+      ${fields.map(f => fieldMarkup(f)).join('\n      ')}
+      <button class="btn" type="submit">Send message</button>
+    </form>
+  </div>
+</section>
+${markerEnd}`.trim();
+
+      const css = `
+/* Contact (generated) */
+.contact-form { display: grid; gap: .8rem; max-width: 560px }
+.contact-form label { font-weight:600 }
+.contact-form input, .contact-form textarea {
+  width: 100%; padding: .7rem .8rem; border-radius: 10px; border: 1px solid rgba(0,0,0,.12); background: white; color: #0f172a;
+}
+.contact-form textarea { min-height: 140px; resize: vertical }
+`.trim();
+
+      const js = `
+function contactSubmit(e) {
+  e.preventDefault();
+  alert('Form submitted! (Hook this up to your backend.)');
+  return false;
+}
+`.trim();
+
+      appendToHTML(html);
+      appendToCSS(css);
+      appendToJS(js);
+      Project.components.push({ id, type: 'contact', options: { fields } });
+      ok('Contact form added.');
+    }
+
+    // Footer
+    function insertFooter(opts = {}) {
+      const id = makeId('footer');
+      const { links = ['About','Privacy','Terms'] } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"footer"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Footer (generated) -->
+<footer class="site-footer">
+  <div class="container" style="display:flex; gap:1rem; align-items:center; justify-content:space-between; flex-wrap:wrap">
+    <p style="margin:0">© <span id="year"></span> BlueForge</p>
+    <nav style="display:flex; gap:1rem">
+      ${links.map(l => `<a href="#">${escapeHtml(l)}</a>`).join('\n      ')}
+    </nav>
+  </div>
+</footer>
+${markerEnd}`.trim();
+
+      appendToHTML(html);
+      Project.components.push({ id, type: 'footer', options: { links } });
+      ok('Footer added.');
+    }
+
+    // Modal
+    function insertModal(opts = {}) {
+      const id = makeId('modal');
+      const { title='Quick modal', body='This is a simple modal dialog.' } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"modal"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Modal (generated) -->
+<div class="modal-wrap" id="${id}" hidden>
+  <div class="modal-backdrop" data-close="${id}"></div>
+  <div class="modal card">
+    <h3 style="margin-top:0">${escapeHtml(title)}</h3>
+    <p>${escapeHtml(body)}</p>
+    <div style="display:flex; gap:.6rem; justify-content:flex-end">
+      <button class="btn secondary" data-close="${id}">Close</button>
+      <button class="btn">Confirm</button>
+    </div>
+  </div>
+</div>
+${markerEnd}`.trim();
+
+      const css = `
+/* Modal (generated) */
+.modal-wrap { position: fixed; inset: 0; display: grid; place-items: center }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(2,6,23,.55) }
+.modal { position: relative; width: min(520px, 92%); padding: 1rem }
+`.trim();
+
+      const js = `
+// Modal controls (generated)
+document.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => {
+  const id = btn.getAttribute('data-open');
+  document.getElementById(id)?.removeAttribute('hidden');
+}));
+document.addEventListener('click', (e)=>{
+  const target = e.target.closest('[data-close]');
+  if (target) document.getElementById(target.getAttribute('data-close'))?.setAttribute('hidden','');
+});
+`.trim();
+
+      appendToHTML(html);
+      appendToCSS(css);
+      appendToJS(js);
+      Project.components.push({ id, type: 'modal', options: { title, body } });
+      ok('Modal added. Use data-open="' + id + '" on any button to open it.');
+    }
+
+    // Tabs
+    function insertTabs(opts = {}) {
+      const id = makeId('tabs');
+      const { tabs = ['Overview','Details','FAQ'] } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"tabs"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Tabs (generated) -->
+<section class="section">
+  <div class="container">
+    <div class="tabs-wrap card">
+      <div class="tabbar">
+        ${tabs.map((t,i)=>`<button class="tab-btn${i===0?' active':''}" data-tab-target="${id}-${i}">${escapeHtml(t)}</button>`).join('')}
+      </div>
+      <div class="tabpanes">
+        ${tabs.map((t,i)=>`<div class="tabpane${i===0?' active':''}" id="${id}-${i}">
+          <p>Content for ${escapeHtml(t)}.</p>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>
+</section>
+${markerEnd}`.trim();
+
+      const css = `
+/* Tabs (generated) */
+.tabs-wrap { padding: .6rem }
+.tabbar { display: flex; gap: .4rem; flex-wrap: wrap }
+.tab-btn { padding: .5rem .8rem; border-radius: 9px; border: 1px solid rgba(0,0,0,.1); background: transparent; cursor: pointer }
+.tab-btn.active { background: var(--accent); color: white; border-color: var(--accent) }
+.tabpanes { margin-top: .8rem }
+.tabpane { display: none }
+.tabpane.active { display: block }
+`.trim();
+
+      const js = `
+// Tabs (generated)
+document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', ()=>{
+  const group = btn.closest('.tabs-wrap');
+  group.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const id = btn.getAttribute('data-tab-target');
+  group.querySelectorAll('.tabpane').forEach(p => p.classList.remove('active'));
+  group.querySelector('#'+CSS.escape(id))?.classList.add('active');
+}));
+`.trim();
+
+      appendToHTML(html);
+      appendToCSS(css);
+      appendToJS(js);
+      Project.components.push({ id, type: 'tabs', options: { tabs } });
+      ok('Tabs added.');
+    }
+
+    // Accordion
+    function insertAccordion() {
+      const id = makeId('accordion');
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"accordion"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Accordion (generated) -->
+<section class="section">
+  <div class="container">
+    <div class="accordion card">
+      ${[1,2,3].map(i => `
+      <details ${i===1?'open':''}>
+        <summary><strong>Question ${i}</strong></summary>
+        <p>Answer for question ${i}. Replace with your content.</p>
+      </details>`).join('')}
+    </div>
+  </div>
+</section>
+${markerEnd}`.trim();
+
+      const css = `
+/* Accordion (generated) */
+.accordion details { border-bottom: 1px solid rgba(0,0,0,.08); padding: .4rem 0 }
+.accordion summary { cursor: pointer; list-style: none }
+`.trim();
+
+      appendToHTML(html);
+      appendToCSS(css);
+      Project.components.push({ id, type: 'accordion', options: {} });
+      ok('Accordion (FAQ) added.');
+    }
+
+    // Card Grid (Features)
+    function insertCardGrid(opts = {}) {
+      const id = makeId('cards');
+      const { heading='Features', items=3 } = opts;
+      const markerStart = `<!-- AI-COMPONENT {"id":"${id}","type":"cards"} -->`;
+      const markerEnd = `<!-- /AI-COMPONENT ${id} -->`;
+      const html = `
+${markerStart}
+<!-- Card Grid (generated) -->
+<section class="section">
+  <div class="container">
+    <h2>${escapeHtml(heading)}</h2>
+    <div class="grid">
+      ${Array.from({length: items}).map((_,i)=>`
+      <div class="card reveal">
+        <h3>Card ${i+1}</h3>
+        <p>Short description of this item. Replace with your content.</p>
+      </div>`).join('')}
+    </div>
+  </div>
+</section>
+${markerEnd}`.trim();
+
+      const css = `
+/* Card grid (generated) */
+.section .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 1rem }
+`.trim();
+
+      appendToHTML(html);
+      appendToCSS(css);
+      Project.components.push({ id, type: 'cards', options: { heading, items } });
+      ok('Card grid added.');
+    }
 
 

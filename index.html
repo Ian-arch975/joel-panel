@@ -1,5 +1,3 @@
-mkdir -p ~/storage/shared/BlueForge && cd ~/storage/shared/BlueForge
-cat > index.html <<'PART1'
 <!doctype html>
 <html lang="en">
 <head>
@@ -215,3 +213,74 @@ cat > index.html <<'PART1'
     }
   </style>
   </head>
+  <body>
+  <!-- Top App Bar -->
+  <header class="appbar">
+    <div class="appbar-inner">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <span>BlueForge</span> <small>Visual AI Builder</small>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="btnNew">New</button>
+        <button class="btn ghost" id="btnImport">Import</button>
+        <div class="sep"></div>
+        <button class="btn" id="btnDownload">Export ZIP</button>
+        <button class="btn primary" id="btnBuild">Build Preview</button>
+      </div>
+      <div class="right-actions">
+        <div class="field" style="align-items:center; grid-auto-flow: column; gap:10px; margin:0">
+          <label for="accentColor">Accent</label>
+          <input type="color" id="accentColor" value="#2563eb" title="Primary Accent Color" />
+        </div>
+        <button class="btn small" id="btnDark">Toggle Dark Preview</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Interaction Panel -->
+    <section class="panel interaction">
+      <div class="panel-header">
+        <h3>Interaction</h3>
+        <div class="toolrow">
+          <span class="tag">NL ➜ Code</span>
+          <button class="btn small" id="btnHelp">Help</button>
+        </div>
+      </div>
+      <div class="panel-body chat">
+        <div class="messages" id="messages">
+          <!-- Seeded AI helper tip -->
+          <div class="msg ai">
+            <div class="avatar">A</div>
+            <div class="bubble">
+              <strong>Welcome!</strong> Tell me what to build. Examples:
+              <ul>
+                <li>Build a landing page with a navbar, hero, and pricing.</li>
+                <li>Add a contact form with name, email, message.</li>
+                <li>Make the navbar sticky and set the logo to “BlueForge”.</li>
+                <li>Change the primary color to #1e40af.</li>
+              </ul>
+              I’ll generate clean, well-commented HTML, CSS, and JS—and you’ll see the live preview update.
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <textarea id="input" class="input" placeholder="Describe what you want to build... (e.g., 'Add a responsive navbar with a logo BlueForge and links Home, Features, Pricing, Contact')"></textarea>
+          <button class="btn primary" id="btnSend">Generate</button>
+        </div>
+
+        <div class="mt8">
+          <div class="chips">
+            <div class="chip" data-quick="Add a responsive navbar with logo BlueForge and links Home, Features, Pricing, Contact">+ Navbar</div>
+            <div class="chip" data-quick="Add a centered hero with title Elevate your web dev, subtitle Build faster with AI, primary button Get started, secondary button Learn more">+ Hero</div>
+            <div class="chip" data-quick="Add a pricing section with three plans: Starter, Pro, Enterprise">+ Pricing</div>
+            <div class="chip" data-quick="Add a contact form with name, email, message and a submit button Send message">+ Contact Form</div>
+            <div class="chip" data-quick="Add a simple footer with links About, Privacy, Terms">+ Footer</div>
+          </div>
+          <h4 style="margin:12px 0 6px; color: var(--muted); font-size:12px; letter-spacing:.4px; text-transform:uppercase">Components</h4>
+          <div id="compList" class="comp-list"></div>
+        </div>
+      </div>
+    </section>
+
